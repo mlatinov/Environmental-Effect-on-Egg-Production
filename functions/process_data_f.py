@@ -5,6 +5,9 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 #### Function to Process the data for ML modeling ####
 def process_data(data, Y):
 
+    # Remove duplicate rows from the dataset
+    data = data.drop_duplicates()
+
     # Divide the data into X and Y
     target = data[Y]
     features = data.drop(Y, axis = 1)
@@ -21,10 +24,12 @@ def process_data(data, Y):
 
     process = ColumnTransformer(
         transformers=[
-            ("num", StandardScaler(), num_features), # Scale Numerical Features
-            ("char",OneHotEncoder(handle_unknown="ignore"), char_features) # One hot encoding (Not needed now)
-        ]
+            ("num", StandardScaler(), num_features),  # Scale Numerical Features
+            ("char", OneHotEncoder(handle_unknown="ignore", sparse_output=False), char_features)  # One hot encoding (Not needed now)
+        ],
+        remainder="drop"  # drop any columns not listed
     )
+
     # Collect the datasets and process
     process_return = {
         "X_train_data" : X_train,
