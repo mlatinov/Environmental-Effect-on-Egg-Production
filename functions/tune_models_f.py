@@ -55,19 +55,22 @@ def tune_rf(processing_output, n_trials):
     study.optimize(objective,n_trials=n_trials)
     # Get Best Parameters
     best_params = study.best_params
-    # Train Final Model
-    best_rf = RandomForestRegressor(
-        **best_params,
-        random_state=42
-    )
-    # Fit the model to the training data
-    fit_rf = best_rf.fit(
+    # Train Final Model Pipeline
+    best_rf_pipeline = Pipeline([
+        ("preprocessing", processing_output["processing"]),
+        ("model",RandomForestRegressor(
+            **best_params,
+            random_state=42
+        ))
+    ])
+    # Fit the model pipeline to the training data
+    best_rf_pipeline.fit(
         X = processing_output["X_train_data"],
         y = processing_output["Y_train_data"]
     )
     # Store the information about the tuning and the model in a dict
     results = {
-        "model" : fit_rf,
+        "tuned_pipeline" : best_rf_pipeline,
         "study" : study,
         "best_parameters" : study.best_params,
         "best_score" : study.best_value,
@@ -124,17 +127,21 @@ def tune_knn(processing_output, n_trials):
     # Get the best parameter
     best_parameters = study.best_params
     # Train the final model with the best parameters
-    best_knn = KNeighborsRegressor(
-        **best_parameters
-    )
-    # Fit the final models on the train data
-    best_knn.fit(
+    best_knn_pipeline = Pipeline([
+        ("preprocessing", processing_output["processing"]),
+        ("model", KNeighborsRegressor(
+            **best_parameters
+        ))
+    ])
+    # Fit the  model pipeline on the train data
+    best_knn_pipeline.fit(
         X=processing_output["X_train_data"],
         y=processing_output["Y_train_data"]
     )
+
     # Store and return the tuned model and metainformation about the tuning performance
     results = {
-        "model" : best_knn,
+        "tuned_pipeline" : best_knn_pipeline,
         "study" : study,
         "best_parameters" : study.best_params,
         "best_score" : study.best_value,
@@ -167,8 +174,9 @@ def svm_tune(processing_output, n_trials):
             ("preprocess", processing_output["processing"]),
             ("model", LinearSVR(
                 # Hyperparameters
-                C=trial.suggest_float("C", 0.1, 100),
-                epsilon=trial.suggest_float("epsilon", 0.001, 1)
+                C=trial.suggest_float("C", 1e-2, 1e2, log=True),
+                epsilon=trial.suggest_float("epsilon", 0.001, 1),
+                max_iter=10000
             ))
         ])
         # Cross validation
@@ -187,19 +195,23 @@ def svm_tune(processing_output, n_trials):
     study.optimize(objective,n_trials=n_trials)
     # Get the best parameters
     best_parameters = study.best_params
-    # Train the tuned model with the best parameters
-    tuned_svm = LinearSVR(
-        **best_parameters,
-        random_state=42
-    )
-    # Fit the model to the training data
-    tuned_svm.fit(
-        X= processing_output["X_train_data"],
-        y=processing_output["Y_train_data"]
+    # Fit the pipeline to the training data
+    tuned_pipeline = Pipeline([
+        ("preprocess", processing_output["processing"]),
+        ("model", LinearSVR(
+            **best_parameters,
+            max_iter=10000,
+            random_state=42
+        ))
+    ])
+    # Fit the model pipeline
+    tuned_pipeline.fit(
+        processing_output["X_train_data"],
+        processing_output["Y_train_data"]
     )
     # Store the tuning results and tuned model in dict\
     results = {
-        "model" : tuned_svm,
+        "tuned_pipeline" : tuned_pipeline,
         "study" : study,
         "best_parameters" : study.best_params,
         "best_score" : study.best_value,
@@ -212,27 +224,31 @@ def hist_boost_tune(processing_output, n_trails):
     def objective(trial):
         # Define a pipeline
         pipeline = Pipeline([
-            "processing", processing_output["processing"],
-            "model", HistGradientBoostingRegressor(
+            ("preprocess", processing_output["processing"]),
+            ("model", HistGradientBoostingRegressor(
                 # Hyperparameter
-                learning_rate=trial.suggest_float("learning_rate",0.01, 0.2, log=True),
-                max_iter=trial.suggest_int("max_iter", 200, 1000),
-                max_depth=trial.suggest_int("max_depth",3 ,10),
-                max_leaf_nodes=trial.suggest_int("max_leaf_nodes",15 , 70),
-                min_samples_leaf=trial.suggest_int("min_samples_leaf",10 , 100),
-                l2_regularization=trial.suggest_float("l2_regularization",0 ,10),
+                learning_rate=trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+                max_iter=trial.suggest_int("max_iter", 300, 2000),
+                max_leaf_nodes = trial.suggest_int("max_leaf_nodes", 15, 50),
+                min_samples_leaf=trial.suggest_int("min_samples_leaf", 5, 30),
+                l2_regularization = trial.suggest_float("l2_regularization", 1e-3, 10, log=True),
                 random_state=42
-            )
+            ))
         ])
-        # Cross validation
-        score = cross_val_score(
-            estimator=pipeline,
-            X=processing_output["X_train_data"],
-            y=processing_output["Y_train_data"],
-            cv=5,
-            scoring="neg_root_mean_squared_error",
-            n_jobs=-1
-        )
+        try :
+            # Cross validation
+            score = cross_val_score(
+                estimator=pipeline,
+                X=processing_output["X_train_data"],
+                y=processing_output["Y_train_data"],
+                cv=5,
+                scoring="neg_root_mean_squared_error",
+                n_jobs=-1
+            )
+        except Exception as e:
+            print("Optuna Cross Validation Fail...Histboost", e)
+            return float("inf")
+
         return -score.mean()
     # Create an Optuna Study
     study = optuna.create_study(direction="minimize")
@@ -240,19 +256,29 @@ def hist_boost_tune(processing_output, n_trails):
     study.optimize(objective,n_trials=n_trails)
     # Get the best parameters
     best_parameters = study.best_params
-    # Train the model with the best parameters
-    tuned_hist_boost = HistGradientBoostingRegressor(
-        **best_parameters,
-        random_state=42
-    )
-    # Fit the model with the training data
-    tuned_hist_boost.fit(
-        X=processing_output["X_train_data"],
-        y=processing_output["Y_train_data"]
-    )
+
+    try:
+        # Train the model with the best parameters
+        tuned_hist_boost_pipeline = Pipeline([
+            ("preprocessing", processing_output["processing"]),
+            ("model", HistGradientBoostingRegressor(
+                **best_parameters,
+                random_state=42
+            ))
+        ])
+        # Fit the model with the training data
+        tuned_hist_boost_pipeline.fit(
+            processing_output["X_train_data"],
+            processing_output["Y_train_data"]
+        )
+        # Error message
+    except Exception as e:
+        print("HistGradientBoosting failed:", e)
+        return e
+
     # Store the tuning results and tuned model in dict\
     results = {
-        "model" : tuned_hist_boost,
+        "tuned_pipeline" : tuned_hist_boost_pipeline,
         "study" : study,
         "best_parameters" : study.best_params,
         "best_score" : study.best_value,
