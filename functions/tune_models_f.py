@@ -4,7 +4,7 @@ from sklearn.model_selection import cross_val_score
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVR
-
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 def tune_rf(processing_output, n_trials):
     """
@@ -207,15 +207,58 @@ def svm_tune(processing_output, n_trials):
     }
     return results
 
-def xgboost_tune(processing_output,n_trails):
+def hist_boost_tune(processing_output, n_trails):
     # Define objective function
     def objective(trial):
         # Define a pipeline
         pipeline = Pipeline([
             "processing", processing_output["processing"],
-            "model",
+            "model", HistGradientBoostingRegressor(
+                # Hyperparameter
+                learning_rate=trial.suggest_float("learning_rate",0.01, 0.2, log=True),
+                max_iter=trial.suggest_int("max_iter", 200, 1000),
+                max_depth=trial.suggest_int("max_depth",3 ,10),
+                max_leaf_nodes=trial.suggest_int("max_leaf_nodes",15 , 70),
+                min_samples_leaf=trial.suggest_int("min_samples_leaf",10 , 100),
+                l2_regularization=trial.suggest_float("l2_regularization",0 ,10),
+                random_state=42
+            )
         ])
-    pass
+        # Cross validation
+        score = cross_val_score(
+            estimator=pipeline,
+            X=processing_output["X_train_data"],
+            y=processing_output["Y_train_data"],
+            cv=5,
+            scoring="neg_root_mean_squared_error",
+            n_jobs=-1
+        )
+        return -score.mean()
+    # Create an Optuna Study
+    study = optuna.create_study(direction="minimize")
+    # Run the optimization
+    study.optimize(objective,n_trials=n_trails)
+    # Get the best parameters
+    best_parameters = study.best_params
+    # Train the model with the best parameters
+    tuned_hist_boost = HistGradientBoostingRegressor(
+        **best_parameters,
+        random_state=42
+    )
+    # Fit the model with the training data
+    tuned_hist_boost.fit(
+        X=processing_output["X_train_data"],
+        y=processing_output["Y_train_data"]
+    )
+    # Store the tuning results and tuned model in dict\
+    results = {
+        "model" : tuned_hist_boost,
+        "study" : study,
+        "best_parameters" : study.best_params,
+        "best_score" : study.best_value,
+        "tune_information_df" : study.trials_dataframe()
+    }
+    return results
 
 
 
