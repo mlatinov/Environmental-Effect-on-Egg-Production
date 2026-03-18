@@ -18,13 +18,19 @@ plots = eda(data = egg_data)
 processing_output = process_data(data=egg_data, Y="Total_egg_production")
 
 ## Tune models ##
-rf_model = tune_rf(processing_output = processing_output, n_trials=10) # Random Forest model
+rf_model = tune_rf(processing_output = processing_output, n_trials=20) # Random Forest model
 knn_model = tune_knn(processing_output= processing_output,n_trials=20) # KNN
-svm_model = svm_tune(processing_output = processing_output, n_trials= 20) # SVM Model
-hist_boost_model = hist_boost_tune(processing_output = processing_output, n_trails=20) # Histboost
+svm_model = svm_tune(processing_output = processing_output, n_trials= 100) # SVM Model
+hist_boost_model = hist_boost_tune(processing_output = processing_output, n_trails=100) # Histboost
 
 ## Predict with the  models on the testing data and evaluate them
-models_evaluation = evaluate_models(
-    models=[rf_model["model"],knn_model["model"],svm_model["model"],hist_boost_model["model"]],
-    processing_output= processing_output
+models_evaluation = pd.DataFrame(
+    evaluate_models(
+        models = [
+            ("rf", rf_model["tuned_pipeline"]),
+            ("knn", knn_model["tuned_pipeline"]),
+            ("svm", svm_model["tuned_pipeline"]),
+            ("histboost", hist_boost_model["tuned_pipeline"])],
+        processing_output= processing_output
+    )
 )
