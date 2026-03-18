@@ -3,13 +3,13 @@ import numpy as np
 
 def evaluate_models(models, processing_output):
     results = []
-    X_train = processing_output["X_train"]
-    Y_train = processing_output["Y_train"]
-    X_test = processing_output["X_test"]
-    Y_test = processing_output["Y_test"]
+    X_train = processing_output["X_train_data"]
+    Y_train = processing_output["Y_train_data"]
+    X_test = processing_output["X_test_data"]
+    Y_test = processing_output["Y_test_data"]
 
     # Loop over the models and evaluate each one
-    for name, model in models.items():
+    for name, model in models:
         # Predictions
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
